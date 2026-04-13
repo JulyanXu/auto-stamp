@@ -1,0 +1,15 @@
+data/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+__pycache__/
+.pytest_cache/
+.DS_Store
+dist-win/
+*.spec.bak
+.venv/
+venv/
+.env
+
+# Claude Code local config
+.claude/
