@@ -65,7 +65,14 @@ def main() -> None:
 
     import uvicorn  # noqa: PLC0415
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=PORT, log_level="warning")
+    # When frozen without a console (sys.stderr/stdout are None), uvicorn's
+    # default logging formatter crashes on isatty(). Disable it entirely.
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=PORT,
+        log_config=None,
+    )
 
 
 if __name__ == "__main__":
