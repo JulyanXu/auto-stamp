@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.converters import ConverterRegistry, MacOSOfficeConverter, PdfPassthroughConverter, WindowsOfficeConverter
+from app.converters import ConverterRegistry, MacOSOfficeConverter, PdfPassthroughConverter, WindowsOfficeConverter, WpsOfficeConverter
 
 
 def test_pdf_passthrough_converter_copies_pdf(tmp_path):
@@ -143,3 +143,93 @@ def test_windows_converter_preserves_primary_word_error_when_close_fails(tmp_pat
         assert str(exc) == "Microsoft Word export failed: export failed"
     else:
         raise AssertionError("Expected conversion to fail.")
+
+
+def test_wps_converter_exports_docx_with_writer_com(tmp_path):
+    source = tmp_path / "contract.docx"
+    source.write_bytes(b"fake")
+    output_dir = tmp_path / "out"
+    calls = []
+
+    class FakeDocument:
+        def ExportAsFixedFormat(self, output, export_format):
+            calls.append(("export", output, export_format))
+            Path(output).write_bytes(b"%PDF-1.4\n")
+
+        def Close(self, save_changes):
+            calls.append(("close", save_changes))
+
+    class FakeDocuments:
+        def Open(self, path):
+            calls.append(("open", path))
+            return FakeDocument()
+
+    class FakeWriter:
+        Documents = FakeDocuments()
+
+        def __setattr__(self, name, value):
+            calls.append(("setattr", name, value))
+
+        def Quit(self):
+            calls.append(("quit",))
+
+    converter = WpsOfficeConverter(system_name="Windows", dispatch_factory=lambda prog_id: FakeWriter())
+
+    result = converter.convert(source, output_dir)
+
+    assert result == output_dir / "contract.pdf"
+    assert result.exists()
+    assert calls == [
+        ("setattr", "Visible", False),
+        ("setattr", "DisplayAlerts", False),
+        ("open", str(source.resolve())),
+        ("export", str(result.resolve()), 17),
+        ("close", False),
+        ("quit",),
+    ]
+
+
+def test_registry_tries_next_converter_when_first_converter_fails(tmp_path):
+    source = tmp_path / "contract.docx"
+    source.write_bytes(b"fake")
+    output_dir = tmp_path / "out"
+
+    class FailingConverter:
+        name = "failing"
+        label = "Failing converter"
+        supported_extensions = {".docx"}
+        available = True
+
+        def supports(self, source):
+            return True
+
+        def describe(self):
+            return {}
+
+        def convert(self, source, output_dir):
+            raise RuntimeError("primary failed")
+
+    class WorkingConverter:
+        name = "working"
+        label = "Working converter"
+        supported_extensions = {".docx"}
+        available = True
+
+        def supports(self, source):
+            return True
+
+        def describe(self):
+            return {}
+
+        def convert(self, source, output_dir):
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output = output_dir / "contract.pdf"
+            output.write_bytes(b"%PDF-1.4\n")
+            return output
+
+    registry = ConverterRegistry(optional_converters=[FailingConverter(), WorkingConverter()])
+
+    result = registry.convert(source, output_dir)
+
+    assert result == output_dir / "contract.pdf"
+    assert result.exists()

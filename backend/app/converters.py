@@ -240,6 +240,106 @@ class WindowsOfficeConverter(Converter):
             pass
 
 
+class WpsOfficeConverter(WindowsOfficeConverter):
+    name = "wps_office"
+    label = "WPS Office COM export"
+
+    writer_prog_ids = ("KWPS.Application", "kwps.Application", "WPS.Application")
+    spreadsheet_prog_ids = ("KET.Application", "ket.Application", "ET.Application")
+    presentation_prog_ids = ("KWPP.Application", "kwpp.Application", "WPP.Application")
+
+    @property
+    def available(self) -> bool:
+        if self.system_name != "Windows":
+            return False
+        if self.dispatch_factory is not None:
+            return True
+        try:
+            import win32com.client  # noqa: F401
+        except Exception:
+            return False
+        return any(
+            self._prog_id_registered(prog_id)
+            for prog_id in self.writer_prog_ids + self.spreadsheet_prog_ids + self.presentation_prog_ids
+        )
+
+    @property
+    def unavailable_reason(self) -> str | None:
+        if self.available:
+            return None
+        return "WPS Office COM automation is not registered or pywin32 is unavailable."
+
+    def _convert_word(self, source: Path, output: Path) -> None:
+        app = self._dispatch_first(self.writer_prog_ids)
+        document = None
+        error: Exception | None = None
+        try:
+            app.Visible = False
+            app.DisplayAlerts = False
+            document = app.Documents.Open(str(source.resolve()))
+            document.ExportAsFixedFormat(str(output.resolve()), 17)
+        except Exception as exc:
+            error = exc
+        finally:
+            if document is not None:
+                self._best_effort(document.Close, False)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"WPS Writer export failed: {error}") from error
+
+    def _convert_excel(self, source: Path, output: Path) -> None:
+        app = self._dispatch_first(self.spreadsheet_prog_ids)
+        workbook = None
+        error: Exception | None = None
+        try:
+            app.Visible = False
+            app.DisplayAlerts = False
+            workbook = app.Workbooks.Open(str(source.resolve()))
+            workbook.ExportAsFixedFormat(0, str(output.resolve()))
+        except Exception as exc:
+            error = exc
+        finally:
+            if workbook is not None:
+                self._best_effort(workbook.Close, False)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"WPS Spreadsheets export failed: {error}") from error
+
+    def _convert_powerpoint(self, source: Path, output: Path) -> None:
+        app = self._dispatch_first(self.presentation_prog_ids)
+        presentation = None
+        error: Exception | None = None
+        try:
+            presentation = app.Presentations.Open(str(source.resolve()), WithWindow=False)
+            presentation.SaveAs(str(output.resolve()), 32)
+        except Exception as exc:
+            error = exc
+        finally:
+            if presentation is not None:
+                self._best_effort(presentation.Close)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"WPS Presentation export failed: {error}") from error
+
+    def _dispatch_first(self, prog_ids: tuple[str, ...]):
+        errors: list[str] = []
+        for prog_id in prog_ids:
+            try:
+                return self._dispatch(prog_id)
+            except Exception as exc:
+                errors.append(f"{prog_id}: {exc}")
+        raise RuntimeError("; ".join(errors) or "No WPS COM application could be created.")
+
+    def _prog_id_registered(self, prog_id: str) -> bool:
+        try:
+            import winreg  # noqa: PLC0415
+
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, prog_id):
+                return True
+        except Exception:
+            return False
+
+
 class MacOSOfficeConverter(Converter):
     name = "macos_office"
     label = "macOS Office AppleScript export"
@@ -414,6 +514,7 @@ class ConverterRegistry:
                     LibreOfficeConverter(),
                     MacOSOfficeConverter(),
                     WindowsOfficeConverter(),
+                    WpsOfficeConverter(),
                 ]
             )
         else:
@@ -423,7 +524,20 @@ class ConverterRegistry:
         return [converter.describe() for converter in self.converters]
 
     def converter_for(self, source: Path) -> Converter | None:
+        converters = self.converters_for(source)
+        return converters[0] if converters else None
+
+    def converters_for(self, source: Path) -> list[Converter]:
+        return [converter for converter in self.converters if converter.available and converter.supports(source)]
+
+    def convert(self, source: Path, output_dir: Path) -> Path:
+        errors: list[str] = []
         for converter in self.converters:
             if converter.available and converter.supports(source):
-                return converter
-        return None
+                try:
+                    return converter.convert(source, output_dir)
+                except Exception as exc:
+                    errors.append(f"{converter.label}: {exc}")
+        if errors:
+            raise RuntimeError(f"All available converters failed for {source.suffix or 'this file type'}: " + " | ".join(errors))
+        raise RuntimeError(f"No available converter for {source.suffix or 'this file type'}.")

@@ -97,11 +97,8 @@ async def create_preview(file: UploadFile = File(...)) -> dict:
     work_dir = PREVIEW_DIR / preview_id
     work_dir.mkdir(parents=True, exist_ok=True)
     source = await _save_upload(file, work_dir)
-    converter = registry.converter_for(source)
-    if not converter:
-        raise HTTPException(status_code=400, detail=f"No available converter for {source.suffix or 'this file type'}.")
     try:
-        pdf = converter.convert(source, work_dir)
+        pdf = registry.convert(source, work_dir)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     pages = _pdf_pages(pdf)
@@ -241,13 +238,8 @@ def _process_job(job_id: str, saved_sources: list[tuple[str, Path]]) -> None:
     for file_id, source in saved_sources:
         item = next(file_item for file_item in job.files if file_item.id == file_id)
         item.status = "processing"
-        converter = registry.converter_for(source)
-        if not converter:
-            item.status = "failed"
-            item.message = f"No available converter for {source.suffix or 'this file type'}."
-            continue
         try:
-            pdf = converter.convert(source, converted_dir)
+            pdf = registry.convert(source, converted_dir)
             output_name = f"{file_id}-{_output_pdf_name(source)}"
             output_pdf = output_dir / output_name
             stamp_pdf(pdf, STAMP_IMAGE_PATH, output_pdf, settings)
