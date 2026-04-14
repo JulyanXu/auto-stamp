@@ -115,10 +115,16 @@ class WindowsOfficeConverter(Converter):
     label = "Microsoft Office COM export"
     supported_extensions = OFFICE_EXTENSIONS
 
+    def __init__(self, system_name: str | None = None, dispatch_factory=None) -> None:
+        self.system_name = system_name or platform.system()
+        self.dispatch_factory = dispatch_factory
+
     @property
     def available(self) -> bool:
-        if platform.system() != "Windows":
+        if self.system_name != "Windows":
             return False
+        if self.dispatch_factory is not None:
+            return True
         try:
             import win32com.client  # noqa: F401
         except Exception:
@@ -132,7 +138,64 @@ class WindowsOfficeConverter(Converter):
         return "Microsoft Office COM automation requires Windows, Office, and pywin32."
 
     def convert(self, source: Path, output_dir: Path) -> Path:
-        raise RuntimeError("Windows Office conversion is detected but not enabled in this build.")
+        if not self.available:
+            raise RuntimeError(self.unavailable_reason)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output = output_dir / f"{source.stem}.pdf"
+        ext = source.suffix.lower()
+        if ext in {".doc", ".docx", ".rtf", ".odt"}:
+            self._convert_word(source, output)
+        elif ext in {".xls", ".xlsx", ".ods"}:
+            self._convert_excel(source, output)
+        elif ext in {".ppt", ".pptx", ".odp"}:
+            self._convert_powerpoint(source, output)
+        else:
+            raise RuntimeError(f"Microsoft Office cannot export {source.suffix or 'this file type'} to PDF.")
+        if not output.exists():
+            raise RuntimeError("Microsoft Office export did not produce a PDF output file.")
+        return output
+
+    def _dispatch(self, app_name: str):
+        if self.dispatch_factory is not None:
+            return self.dispatch_factory(app_name)
+        import win32com.client  # noqa: PLC0415
+
+        return win32com.client.DispatchEx(app_name)
+
+    def _convert_word(self, source: Path, output: Path) -> None:
+        app = self._dispatch("Word.Application")
+        document = None
+        try:
+            app.Visible = False
+            document = app.Documents.Open(str(source.resolve()), ReadOnly=True)
+            document.ExportAsFixedFormat(str(output.resolve()), 17)
+        finally:
+            if document is not None:
+                document.Close(False)
+            app.Quit()
+
+    def _convert_excel(self, source: Path, output: Path) -> None:
+        app = self._dispatch("Excel.Application")
+        workbook = None
+        try:
+            app.Visible = False
+            workbook = app.Workbooks.Open(str(source.resolve()), ReadOnly=True)
+            workbook.ExportAsFixedFormat(0, str(output.resolve()))
+        finally:
+            if workbook is not None:
+                workbook.Close(False)
+            app.Quit()
+
+    def _convert_powerpoint(self, source: Path, output: Path) -> None:
+        app = self._dispatch("PowerPoint.Application")
+        presentation = None
+        try:
+            presentation = app.Presentations.Open(str(source.resolve()), WithWindow=False)
+            presentation.SaveAs(str(output.resolve()), 32)
+        finally:
+            if presentation is not None:
+                presentation.Close()
+            app.Quit()
 
 
 class MacOSOfficeConverter(Converter):

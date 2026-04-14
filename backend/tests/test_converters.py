@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.converters import ConverterRegistry, MacOSOfficeConverter, PdfPassthroughConverter
+from app.converters import ConverterRegistry, MacOSOfficeConverter, PdfPassthroughConverter, WindowsOfficeConverter
 
 
 def test_pdf_passthrough_converter_copies_pdf(tmp_path):
@@ -49,3 +49,46 @@ def test_macos_converter_uses_pages_for_docx_when_word_is_missing():
     assert 'tell application "/Applications/Pages.app"' in script
     assert 'export front document to POSIX file "/tmp/contract.pdf" as PDF' in script
     assert "format PDF" not in script
+
+
+def test_windows_converter_exports_docx_with_word_com(tmp_path):
+    source = tmp_path / "contract.docx"
+    source.write_bytes(b"fake")
+    output_dir = tmp_path / "out"
+    calls = []
+
+    class FakeDocument:
+        def ExportAsFixedFormat(self, output, export_format):
+            calls.append(("export", output, export_format))
+            Path(output).write_bytes(b"%PDF-1.4\n")
+
+        def Close(self, save_changes):
+            calls.append(("close", save_changes))
+
+    class FakeDocuments:
+        def Open(self, path, ReadOnly=True):
+            calls.append(("open", path, ReadOnly))
+            return FakeDocument()
+
+    class FakeWord:
+        Documents = FakeDocuments()
+
+        def __setattr__(self, name, value):
+            calls.append(("setattr", name, value))
+
+        def Quit(self):
+            calls.append(("quit",))
+
+    converter = WindowsOfficeConverter(system_name="Windows", dispatch_factory=lambda _: FakeWord())
+
+    result = converter.convert(source, output_dir)
+
+    assert result == output_dir / "contract.pdf"
+    assert result.exists()
+    assert calls == [
+        ("setattr", "Visible", False),
+        ("open", str(source.resolve()), True),
+        ("export", str(result.resolve()), 17),
+        ("close", False),
+        ("quit",),
+    ]
