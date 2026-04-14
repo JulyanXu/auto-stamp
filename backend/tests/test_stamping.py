@@ -104,3 +104,36 @@ def test_stamp_pdf_can_use_fixed_stamp_size_in_mm(tmp_path):
         assert round(image_rects[0].height, 1) == round(20 * 72 / 25.4, 1)
     finally:
         stamped.close()
+
+
+def test_stamp_pdf_preserves_stamp_image_aspect_ratio(tmp_path):
+    source_pdf = tmp_path / "source.pdf"
+    stamp_png = tmp_path / "wide_stamp.png"
+    output_pdf = tmp_path / "output.pdf"
+
+    doc = fitz.open()
+    doc.new_page(width=595, height=842)
+    doc.save(source_pdf)
+    doc.close()
+
+    pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 40), 1)
+    pixmap.clear_with(0xFF0000)
+    pixmap.save(stamp_png)
+
+    settings = StampSettings(
+        x_ratio=0.1,
+        y_ratio=0.1,
+        width_mm=40,
+        height_mm=40,
+        page_rule="first",
+    )
+
+    stamp_pdf(source_pdf, stamp_png, output_pdf, settings)
+
+    stamped = fitz.open(output_pdf)
+    try:
+        image_rects = stamped[0].get_image_rects(stamped[0].get_images(full=True)[0][0])
+        assert len(image_rects) == 1
+        assert round(image_rects[0].width / image_rects[0].height, 1) == 2.0
+    finally:
+        stamped.close()

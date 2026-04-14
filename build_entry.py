@@ -41,6 +41,7 @@ def _patch_config() -> None:
     cfg.SETTINGS_DIR = data / "settings"
     cfg.STAMP_IMAGE_PATH = data / "settings" / "stamp.png"
     cfg.STAMP_SETTINGS_PATH = data / "settings" / "stamp-settings.json"
+    cfg.TEMPLATES_PATH = data / "settings" / "templates.json"
 
 
 PORT = 8000

@@ -77,6 +77,44 @@ p {
   font-size: 13px;
 }
 
+.template-ribbon {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 22px;
+  padding: 18px 22px;
+  border: 2px solid #b12222;
+  border-radius: 8px;
+  background: #fffefa;
+}
+
+.template-ribbon div {
+  display: grid;
+  gap: 6px;
+}
+
+.template-ribbon strong {
+  font-size: 20px;
+}
+
+.template-ribbon span {
+  color: #b12222;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.template-ribbon label {
+  color: #4f4b44;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.template-ribbon select {
+  margin: 8px 0 0;
+  border-color: #b12222;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
@@ -174,6 +212,23 @@ select,
 
 .size-grid input {
   margin-top: 6px;
+}
+
+.field-label {
+  display: block;
+  margin: 12px 0 6px;
+  color: #4f4b44;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.active-template {
+  margin: -2px 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f6f5f1;
+  color: #4f4b44;
+  font-size: 13px;
 }
 
 .preview-panel {
@@ -279,7 +334,7 @@ select,
 
 .batch-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px) auto auto;
   gap: 20px;
   align-items: start;
   margin-top: 22px;
@@ -293,6 +348,27 @@ select,
 .stamp-button {
   border-color: #b12222;
   background: #b12222;
+}
+
+.batch-template {
+  display: grid;
+  gap: 6px;
+}
+
+.batch-template .field-label {
+  margin: 0;
+}
+
+.batch-template select {
+  margin: 0;
+}
+
+.batch-template span {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f6f5f1;
+  color: #4f4b44;
+  font-size: 13px;
 }
 
 .selected-files {

@@ -1,4 +1,8 @@
 data/
+build/
+dist/
+build-*/
+dist-*/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

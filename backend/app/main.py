@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import FRONTEND_DIST_DIR, PREVIEW_DIR, RESULT_DIR, STAMP_IMAGE_PATH, ensure_data_dirs
 from app.converters import ConverterRegistry
-from app.models import Job, JobFile, StampSettings
-from app.settings_store import load_settings, save_settings
+from app.models import Job, JobFile, StampSettings, StampTemplate, TemplateCreate, TemplatesState
+from app.settings_store import active_settings, create_template, load_settings, load_templates, save_settings, select_template
 from app.stamping import stamp_pdf
 
 
@@ -70,6 +70,24 @@ def get_stamp_settings() -> StampSettings:
 @app.put("/api/stamp-settings", response_model=StampSettings)
 def put_stamp_settings(settings: StampSettings) -> StampSettings:
     return save_settings(settings)
+
+
+@app.get("/api/templates", response_model=TemplatesState)
+def get_templates() -> TemplatesState:
+    return load_templates()
+
+
+@app.post("/api/templates", response_model=StampTemplate)
+def post_template(payload: TemplateCreate) -> StampTemplate:
+    return create_template(payload)
+
+
+@app.put("/api/templates/{template_id}/select", response_model=StampTemplate)
+def put_active_template(template_id: str) -> StampTemplate:
+    try:
+        return select_template(template_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Template not found.") from exc
 
 
 @app.post("/api/preview")
@@ -213,7 +231,7 @@ def _render_pdf_page(pdf: Path, page_number: int, image_path: Path) -> Path:
 def _process_job(job_id: str, saved_sources: list[tuple[str, Path]]) -> None:
     job = jobs[job_id]
     job.status = "processing"
-    settings = load_settings()
+    settings = active_settings()
     output_dir = RESULT_DIR / job_id / "outputs"
     converted_dir = RESULT_DIR / job_id / "converted"
     output_dir.mkdir(parents=True, exist_ok=True)

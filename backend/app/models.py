@@ -24,3 +24,19 @@ class Job(BaseModel):
     status: str
     files: list[JobFile]
     zip_url: str | None = None
+
+
+class StampTemplate(BaseModel):
+    id: str
+    name: str
+    settings: StampSettings
+
+
+class TemplatesState(BaseModel):
+    active_template_id: str | None = None
+    templates: list[StampTemplate] = []
+
+
+class TemplateCreate(BaseModel):
+    name: str
+    settings: StampSettings

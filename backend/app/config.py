@@ -10,6 +10,7 @@ RESULT_DIR = DATA_DIR / "results"
 SETTINGS_DIR = DATA_DIR / "settings"
 STAMP_IMAGE_PATH = SETTINGS_DIR / "stamp.png"
 STAMP_SETTINGS_PATH = SETTINGS_DIR / "stamp-settings.json"
+TEMPLATES_PATH = SETTINGS_DIR / "templates.json"
 
 
 def ensure_data_dirs() -> None:

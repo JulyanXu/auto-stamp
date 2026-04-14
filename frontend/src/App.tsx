@@ -41,6 +41,17 @@ type Preview = {
   page_image_url: string;
 };
 
+type StampTemplate = {
+  id: string;
+  name: string;
+  settings: StampSettings;
+};
+
+type TemplatesState = {
+  active_template_id: string | null;
+  templates: StampTemplate[];
+};
+
 const defaultSettings: StampSettings = {
   x_ratio: 0.65,
   y_ratio: 0.68,
@@ -73,10 +84,15 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  const [templates, setTemplates] = useState<StampTemplate[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [templateName, setTemplateName] = useState("模板 1");
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
   useEffect(() => {
     api.json<{ converters: Converter[] }>("/api/converters").then((data) => setConverters(data.converters));
     api.json<StampSettings>("/api/stamp-settings").then(setSettings);
+    refreshTemplates(true);
   }, []);
 
   useEffect(() => {
@@ -141,6 +157,46 @@ export default function App() {
     }
   }
 
+  async function saveTemplate() {
+    setIsSavingTemplate(true);
+    try {
+      const created = await api.json<StampTemplate>("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: templateName, settings })
+      });
+      await refreshTemplates(false);
+      setActiveTemplateId(created.id);
+      setSettings(created.settings);
+      setTemplateName(created.name);
+      setMessage(`已保存并启用模板：${created.name}`);
+    } catch (err) {
+      setMessage(`保存模板失败：${err instanceof Error ? err.message : "未知错误"}`);
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }
+
+  async function selectTemplate(templateId: string) {
+    if (!templateId) return;
+    const selected = await api.json<StampTemplate>(`/api/templates/${templateId}/select`, { method: "PUT" });
+    setActiveTemplateId(selected.id);
+    setSettings(selected.settings);
+    setTemplateName(selected.name);
+    setMessage(`已切换到模板：${selected.name}`);
+  }
+
+  async function refreshTemplates(applyActive: boolean) {
+    const data = await api.json<TemplatesState>("/api/templates");
+    setTemplates(data.templates);
+    setActiveTemplateId(data.active_template_id);
+    const active = data.templates.find((template) => template.id === data.active_template_id);
+    if (applyActive && active) {
+      setSettings(active.settings);
+      setTemplateName(active.name);
+    }
+  }
+
   function updateStampSize(field: "width_mm" | "height_mm", value: string) {
     const next = Number(value);
     setSettings({
@@ -184,6 +240,24 @@ export default function App() {
         <div className="status-pill">{availableFormats || ".pdf"}</div>
       </header>
 
+      <section className="template-ribbon">
+        <div>
+          <strong>当前批量盖章模板</strong>
+          <span>{templates.find((template) => template.id === activeTemplateId)?.name ?? "未选择模板"}</span>
+        </div>
+        <label>
+          选择保存好的默认模板
+          <select value={activeTemplateId ?? ""} onChange={(event) => selectTemplate(event.target.value)}>
+            <option value="">未选择模板</option>
+            {templates.map((template) => (
+              <option value={template.id} key={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
       <section className="workspace">
         <aside className="settings-panel">
           <section>
@@ -205,6 +279,37 @@ export default function App() {
               上传样本文档
               <input id="preview-upload" type="file" onChange={uploadPreview} />
             </label>
+          </section>
+
+          <section>
+            <h2>默认模板管理</h2>
+            <p>保存多个默认模板，批量盖章会使用当前启用的模板。</p>
+            <label className="field-label">
+              选择保存好的默认模板（批量盖章使用）
+            </label>
+            <select value={activeTemplateId ?? ""} onChange={(event) => selectTemplate(event.target.value)}>
+              <option value="">未选择模板</option>
+              {templates.map((template) => (
+                <option value={template.id} key={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            <div className="active-template">
+              当前模板：{templates.find((template) => template.id === activeTemplateId)?.name ?? "未选择"}
+            </div>
+            <label className="field-label">
+              保存当前设置为新模板
+            </label>
+            <input
+              className="rule-input"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="模板名称，例如：合同首页章"
+            />
+            <button onClick={saveTemplate} disabled={isSavingTemplate}>
+              {isSavingTemplate ? "保存中..." : "保存为模板"}
+            </button>
           </section>
 
           <section>
@@ -285,6 +390,18 @@ export default function App() {
         <div>
           <h2>批量处理</h2>
           <p>上传文件后逐个转换为 PDF 并盖章；失败文件不会阻塞其他文件。</p>
+        </div>
+        <div className="batch-template">
+          <label className="field-label">使用保存好的默认模板</label>
+          <select value={activeTemplateId ?? ""} onChange={(event) => selectTemplate(event.target.value)}>
+            <option value="">未选择模板</option>
+            {templates.map((template) => (
+              <option value={template.id} key={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+          <span>当前模板：{templates.find((template) => template.id === activeTemplateId)?.name ?? "未选择"}</span>
         </div>
         <label className="file-action primary">
           选择批量文件

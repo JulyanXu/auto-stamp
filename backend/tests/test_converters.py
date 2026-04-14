@@ -46,6 +46,6 @@ def test_macos_converter_uses_pages_for_docx_when_word_is_missing():
     assert converter.supports(Path("contract.docx"))
     script = converter.script_for(Path("/tmp/contract.docx"), Path("/tmp/contract.pdf"))
 
-    assert 'tell application "Pages"' in script
-    assert "export front document to outputFile as PDF" in script
+    assert 'tell application "/Applications/Pages.app"' in script
+    assert 'export front document to POSIX file "/tmp/contract.pdf" as PDF' in script
     assert "format PDF" not in script

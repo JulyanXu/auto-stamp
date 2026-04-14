@@ -56,7 +56,7 @@ def stamp_pdf(
         for page_index in resolve_pages(settings.page_rule, len(document)):
             page = document[page_index]
             rect = _stamp_rect(page.rect, settings)
-            page.insert_image(rect, filename=str(stamp_image), keep_proportion=False, overlay=True)
+            page.insert_image(rect, filename=str(stamp_image), keep_proportion=True, overlay=True)
         document.save(output_pdf, garbage=4, deflate=True)
     finally:
         document.close()
