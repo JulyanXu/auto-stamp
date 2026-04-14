@@ -66,8 +66,8 @@ def test_windows_converter_exports_docx_with_word_com(tmp_path):
             calls.append(("close", save_changes))
 
     class FakeDocuments:
-        def Open(self, path, ReadOnly=True):
-            calls.append(("open", path, ReadOnly))
+        def Open(self, *args):
+            calls.append(("open", *args))
             return FakeDocument()
 
     class FakeWord:
@@ -87,8 +87,59 @@ def test_windows_converter_exports_docx_with_word_com(tmp_path):
     assert result.exists()
     assert calls == [
         ("setattr", "Visible", False),
-        ("open", str(source.resolve()), True),
+        ("setattr", "DisplayAlerts", 0),
+        ("setattr", "AutomationSecurity", 3),
+        (
+            "open",
+            str(source.resolve()),
+            False,
+            True,
+            False,
+            "",
+            "",
+            False,
+            "",
+            "",
+            0,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+        ),
         ("export", str(result.resolve()), 17),
-        ("close", False),
+        ("close", 0),
         ("quit",),
     ]
+
+
+def test_windows_converter_preserves_primary_word_error_when_close_fails(tmp_path):
+    source = tmp_path / "broken.docx"
+    source.write_bytes(b"fake")
+
+    class FakeDocument:
+        def ExportAsFixedFormat(self, output, export_format):
+            raise RuntimeError("export failed")
+
+        def Close(self, save_changes):
+            raise RuntimeError("Open.Close")
+
+    class FakeDocuments:
+        def Open(self, *args):
+            return FakeDocument()
+
+    class FakeWord:
+        Documents = FakeDocuments()
+
+        def Quit(self):
+            raise RuntimeError("quit failed")
+
+    converter = WindowsOfficeConverter(system_name="Windows", dispatch_factory=lambda _: FakeWord())
+
+    try:
+        converter.convert(source, tmp_path / "out")
+    except RuntimeError as exc:
+        assert str(exc) == "Microsoft Word export failed: export failed"
+    else:
+        raise AssertionError("Expected conversion to fail.")

@@ -165,37 +165,79 @@ class WindowsOfficeConverter(Converter):
     def _convert_word(self, source: Path, output: Path) -> None:
         app = self._dispatch("Word.Application")
         document = None
+        error: Exception | None = None
         try:
             app.Visible = False
-            document = app.Documents.Open(str(source.resolve()), ReadOnly=True)
+            app.DisplayAlerts = 0
+            app.AutomationSecurity = 3
+            document = app.Documents.Open(
+                str(source.resolve()),
+                False,
+                True,
+                False,
+                "",
+                "",
+                False,
+                "",
+                "",
+                0,
+                False,
+                False,
+                False,
+                False,
+                True,
+                False,
+            )
             document.ExportAsFixedFormat(str(output.resolve()), 17)
+        except Exception as exc:
+            error = exc
         finally:
             if document is not None:
-                document.Close(False)
-            app.Quit()
+                self._best_effort(document.Close, 0)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"Microsoft Word export failed: {error}") from error
 
     def _convert_excel(self, source: Path, output: Path) -> None:
         app = self._dispatch("Excel.Application")
         workbook = None
+        error: Exception | None = None
         try:
             app.Visible = False
+            app.DisplayAlerts = False
             workbook = app.Workbooks.Open(str(source.resolve()), ReadOnly=True)
             workbook.ExportAsFixedFormat(0, str(output.resolve()))
+        except Exception as exc:
+            error = exc
         finally:
             if workbook is not None:
-                workbook.Close(False)
-            app.Quit()
+                self._best_effort(workbook.Close, False)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"Microsoft Excel export failed: {error}") from error
 
     def _convert_powerpoint(self, source: Path, output: Path) -> None:
         app = self._dispatch("PowerPoint.Application")
         presentation = None
+        error: Exception | None = None
         try:
+            app.DisplayAlerts = 1
             presentation = app.Presentations.Open(str(source.resolve()), WithWindow=False)
             presentation.SaveAs(str(output.resolve()), 32)
+        except Exception as exc:
+            error = exc
         finally:
             if presentation is not None:
-                presentation.Close()
-            app.Quit()
+                self._best_effort(presentation.Close)
+            self._best_effort(app.Quit)
+        if error is not None:
+            raise RuntimeError(f"Microsoft PowerPoint export failed: {error}") from error
+
+    def _best_effort(self, func, *args) -> None:
+        try:
+            func(*args)
+        except Exception:
+            pass
 
 
 class MacOSOfficeConverter(Converter):
